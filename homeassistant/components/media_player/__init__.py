@@ -60,6 +60,8 @@ from homeassistant.loader import bind_hass
 from .const import (
     ATTR_APP_ID,
     ATTR_APP_NAME,
+    ATTR_GROUP_CANDIDATES,
+    ATTR_GROUP_MEMBERS,
     ATTR_INPUT_SOURCE,
     ATTR_INPUT_SOURCE_LIST,
     ATTR_MEDIA_ALBUM_ARTIST,
@@ -86,11 +88,14 @@ from .const import (
     ATTR_SOUND_MODE_LIST,
     DOMAIN,
     SERVICE_CLEAR_PLAYLIST,
+    SERVICE_JOIN,
     SERVICE_PLAY_MEDIA,
     SERVICE_SELECT_SOUND_MODE,
     SERVICE_SELECT_SOURCE,
+    SERVICE_UNJOIN,
     SUPPORT_BROWSE_MEDIA,
     SUPPORT_CLEAR_PLAYLIST,
+    SUPPORT_GROUPING,
     SUPPORT_NEXT_TRACK,
     SUPPORT_PAUSE,
     SUPPORT_PLAY,
@@ -162,6 +167,8 @@ ATTR_TO_PROPERTY = [
     ATTR_INPUT_SOURCE,
     ATTR_SOUND_MODE,
     ATTR_MEDIA_SHUFFLE,
+    ATTR_GROUP_MEMBERS,
+    ATTR_GROUP_CANDIDATES
 ]
 
 
@@ -293,6 +300,12 @@ async def async_setup(hass, config):
         [SUPPORT_SEEK],
     )
     component.async_register_entity_service(
+        SERVICE_JOIN,
+        {vol.Required(ATTR_GROUP_MEMBERS): list},
+        "async_join",
+        [SUPPORT_GROUPING],
+    )
+    component.async_register_entity_service(
         SERVICE_SELECT_SOURCE,
         {vol.Required(ATTR_INPUT_SOURCE): cv.string},
         "async_select_source",
@@ -322,6 +335,9 @@ async def async_setup(hass, config):
         {vol.Required(ATTR_MEDIA_SHUFFLE): cv.boolean},
         "async_set_shuffle",
         [SUPPORT_SHUFFLE_SET],
+    )
+    component.async_register_entity_service(
+        SERVICE_UNJOIN, {}, "async_unjoin", [SUPPORT_GROUPING]
     )
 
     return True
@@ -505,6 +521,23 @@ class MediaPlayerEntity(Entity):
     @property
     def shuffle(self):
         """Boolean if shuffle is enabled."""
+        return None
+
+    @property
+    def group_candidates(self):
+        """List of players which can be grouped together."""
+        if self.support_grouping:
+            return [
+                player.entity_id
+                for player in self.hass.data[DOMAIN].entities
+                if isinstance(player, self.__class__) and player != self
+            ]
+        else:
+            return []
+
+    @property
+    def group_members(self):
+        """List of members which are currently grouped together."""
         return None
 
     @property
@@ -699,6 +732,11 @@ class MediaPlayerEntity(Entity):
     def support_shuffle_set(self):
         """Boolean if shuffle is supported."""
         return bool(self.supported_features & SUPPORT_SHUFFLE_SET)
+
+    @property
+    def support_grouping(self):
+        """Boolean if player grouping is supported."""
+        return bool(self.supported_features & SUPPORT_GROUPING)
 
     async def async_toggle(self):
         """Toggle the power on the media player."""
